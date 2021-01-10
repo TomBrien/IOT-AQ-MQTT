@@ -1,6 +1,8 @@
 # Local config
-
 /config.yaml
+
+# Logs
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

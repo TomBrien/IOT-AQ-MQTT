@@ -1,8 +1,11 @@
+import logging
 import os
 import sys
 import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
+import coloredlogs
 import numpy as np
 import paho.mqtt.client as mqtt
 import yaml
@@ -11,9 +14,45 @@ from pms5003 import PMS5003
 from sgp30 import SGP30
 from smbus2 import SMBus
 
+coloredlogs.install(level="DEBUG")
+
+logger = logging.getLogger(__name__)
+
+if not os.path.exists(os.path.join(os.path.dirname(__file__), "logs")):
+    os.makedirs(os.path.join(os.path.dirname(__file__), "logs"))
+
+fh = RotatingFileHandler(
+    os.path.join(os.path.dirname(__file__), "logs", "log.txt"),
+    maxBytes=1024,
+    backupCount=10,
+)
+fh.setLevel(logging.INFO)
+fh.setFormatter(
+    logging.Formatter("%(asctime)s [%(process)d] %(levelname)s %(message)s")
+)
+logger.addHandler(fh)
+
 
 def full_topic(topic: str, config: dict) -> str:
     return f"{config['topic']['root']}/{config['topic']['location']}/{topic}"
+
+
+def on_connect(client, userdata, flags, rc) -> None:
+    if not rc:
+        logger.info(
+            "Connected successfully to "
+            f"{client.socket().getpeername()[0]}:{client.socket().getpeername()[1]}"
+        )
+    else:
+        logger.warning(
+            "Connection refused by "
+            f"{client.socket().getpeername()[0]}:{client.socket().getpeername()[1]} "
+            f"with response code {rc}"
+        )
+
+
+def on_disconnect(client, userdata, rc) -> None:
+    logger.warning("Unexpected disconnect")
 
 
 # Create objects
@@ -34,28 +73,36 @@ client = mqtt.Client(f"AQ_{config['topic']['location']}")
 if "user" in config["broker"].keys() and "password" in config["broker"].keys():
     client.username_pw_set(config["broker"]["user"], config["broker"]["password"])
 
+logger.info("Attaching paho.mqtt log listener")
+
+client.enable_logger(logger=logger)
+
+client.on_connect = on_connect
+client._on_disconnect = on_disconnect
+
+client.connect_async(
+    config["broker"]["address"], config["broker"]["port"], keepalive=90
+)
+
+logger.info("Starting MQTT loop thread")
+client.loop_start()
+
+logger.info("Awaiting MQTT Connection")
+
+# Await connection OK
+while not client.is_connected():
+    time.sleep(1)
+
 last_boot = datetime.now().isoformat(timespec="seconds")
 
-while True:
-    conn = client.connect(config["broker"]["address"], config["broker"]["port"])
+client.publish(full_topic("last_start", config), last_boot)
 
-    if conn == 0:  # OK
-        client.publish(
-            full_topic("last_start", config),
-            last_boot,
-        )
-        client.disconnect()
-        break
-    elif conn == 3:  # No response
-        time.sleep(60)
-    else:  # Authentication problem, this isn't going to get better, exit
-        sys.exit(conn)
-
+logger.info("Warming up sensors, this should take 3 minutes and 15 seconds")
+# Warm up sensors
 i = 0
-
 sgp30.start_measurement()  # Will take 15 seconds
 
-while i < 180:  # Warm up sensors
+while i < 180:
     _ = pms5003.read()
     _ = bme280.get_temperature()
     _ = bme280.get_pressure()
@@ -63,6 +110,8 @@ while i < 180:  # Warm up sensors
     _ = sgp30.get_air_quality()
     time.sleep(1)
     i += 1
+
+logger.info("Warm up finished, entering main loop")
 
 last_publish = datetime.now().timestamp()
 if "publish_interval" in config.keys():
@@ -77,96 +126,98 @@ humidity = np.array([])
 eCO2 = np.array([])
 VOC = np.array([])
 
+try:
+    while True:
+        pm = np.append(pm, np.array([list(pms5003.read().data)[:12]]), axis=0)
 
-while True:
-    pm = np.append(pm, np.array([list(pms5003.read().data)[:12]]), axis=0)
+        temperature = np.append(temperature, bme280.get_temperature())
+        pressure = np.append(pressure, bme280.get_pressure())
+        humidity = np.append(humidity, bme280.get_humidity())
 
-    temperature = np.append(temperature, bme280.get_temperature())
-    pressure = np.append(pressure, bme280.get_pressure())
-    humidity = np.append(humidity, bme280.get_humidity())
+        gas = sgp30.get_air_quality()
+        eCO2 = np.append(eCO2, gas.equivalent_co2)
+        VOC = np.append(VOC, gas.total_voc)
 
-    gas = sgp30.get_air_quality()
-    eCO2 = np.append(eCO2, gas.equivalent_co2)
-    VOC = np.append(VOC, gas.total_voc)
+        # Send data to broker ever publish_interval
+        if datetime.now().timestamp() - last_publish > publish_interval:
+            if client.is_connected():
+                client.publish(
+                    full_topic("pm1.0_ug", config),
+                    f"{np.mean(pm[:, 3]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm2.5_ug", config),
+                    f"{np.mean(pm[:, 4]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm10_ug", config),
+                    f"{np.mean(pm[:, 5]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm_gt_0.3", config),
+                    f"{np.mean(pm[:, 6]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm_gt_0.5", config),
+                    f"{np.mean(pm[:, 7]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm_gt_1.0", config),
+                    f"{np.mean(pm[:, 8]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm_gt_2.5", config),
+                    f"{np.mean(pm[:, 9]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm_gt_5.0", config),
+                    f"{np.mean(pm[:, 10]):.1f}",
+                )
+                client.publish(
+                    full_topic("pm_gt_10.0", config),
+                    f"{np.mean(pm[:, 11]):.1f}",
+                )
+                client.publish(
+                    full_topic("temperature", config),
+                    f"{np.mean(temperature):.2f}",
+                )
+                client.publish(
+                    full_topic("pressure", config),
+                    f"{np.mean(pressure):.2f}",
+                )
+                client.publish(
+                    full_topic("humidity", config),
+                    f"{np.mean(humidity):.1f}",
+                )
+                client.publish(
+                    full_topic("eCO2", config),
+                    f"{np.mean(eCO2):.1f}",
+                )
+                client.publish(
+                    full_topic("VOC", config),
+                    f"{np.mean(VOC):.1f}",
+                )
+                client.publish(
+                    full_topic("last_start", config),
+                    last_boot,
+                )
 
-    # Send data to broker ever publish_interval
-    if datetime.now().timestamp() - last_publish > publish_interval:
-        conn = client.reconnect()
-        if conn == 0:  # OK
-            client.publish(
-                full_topic("pm1.0_ug", config),
-                f"{np.mean(pm[:, 3]):.1f}",
-            )
-            client.publish(
-                full_topic("pm2.5_ug", config),
-                f"{np.mean(pm[:, 4]):.1f}",
-            )
-            client.publish(
-                full_topic("pm10_ug", config),
-                f"{np.mean(pm[:, 5]):.1f}",
-            )
-            client.publish(
-                full_topic("pm_gt_0.3", config),
-                f"{np.mean(pm[:, 6]):.1f}",
-            )
-            client.publish(
-                full_topic("pm_gt_0.5", config),
-                f"{np.mean(pm[:, 7]):.1f}",
-            )
-            client.publish(
-                full_topic("pm_gt_1.0", config),
-                f"{np.mean(pm[:, 8]):.1f}",
-            )
-            client.publish(
-                full_topic("pm_gt_2.5", config),
-                f"{np.mean(pm[:, 9]):.1f}",
-            )
-            client.publish(
-                full_topic("pm_gt_5.0", config),
-                f"{np.mean(pm[:, 10]):.1f}",
-            )
-            client.publish(
-                full_topic("pm_gt_10.0", config),
-                f"{np.mean(pm[:, 11]):.1f}",
-            )
-            client.publish(
-                full_topic("temperature", config),
-                f"{np.mean(temperature):.2f}",
-            )
-            client.publish(
-                full_topic("pressure", config),
-                f"{np.mean(pressure):.2f}",
-            )
-            client.publish(
-                full_topic("humidity", config),
-                f"{np.mean(humidity):.1f}",
-            )
-            client.publish(
-                full_topic("eCO2", config),
-                f"{np.mean(eCO2):.1f}",
-            )
-            client.publish(
-                full_topic("VOC", config),
-                f"{np.mean(VOC):.1f}",
-            )
-            client.publish(
-                full_topic("last_start", config),
-                last_boot,
-            )
-            client.disconnect()
-        elif conn == 3:  # No response
-            pass
-        else:  # Authentication problem, this isn't going to get better, exit
-            sys.exit(conn)
+            last_publish = datetime.now().timestamp()  # Update regardless of success
 
-        last_publish = datetime.now().timestamp()  # Update regardless of success
+            # Empty Arrays
+            pm = np.empty((0, 12))
+            temperature = np.array([])
+            pressure = np.array([])
+            humidity = np.array([])
+            eCO2 = np.array([])
+            VOC = np.array([])
 
-        # Empty Arrays
-        pm = np.empty((0, 12))
-        temperature = np.array([])
-        pressure = np.array([])
-        humidity = np.array([])
-        eCO2 = np.array([])
-        VOC = np.array([])
-
+        time.sleep(1)
+except KeyboardInterrupt:
+    pass
+finally:
+    logger.info("Stopping MQTT loop thread")
+    client.loop_stop()
     time.sleep(1)
+    logger.info("Disconnecting from broker")
+    client.disconnect()
