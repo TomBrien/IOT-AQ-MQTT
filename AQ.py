@@ -1,5 +1,6 @@
 import logging
 import os
+import signal
 import sys
 import time
 from datetime import datetime
@@ -37,8 +38,17 @@ def full_topic(topic: str, config: dict) -> str:
     return f"{config['topic']['root']}/{config['topic']['location']}/{topic}"
 
 
+def term_signal_handler(signal, frame):
+    logger.info("Received kill signal, trying to shutdown gracefully")
+    client.loop_stop()
+    logger.info("MQTT client loop stopped")
+    client.disconnect()
+    logger.info("Disconnected from MQTT broker")
+    sys.exit(0)
+
+
 def on_connect(client, userdata, flags, rc) -> None:
-    if not rc:
+    if rc == 0:
         logger.info(
             "Connected successfully to "
             f"{client.socket().getpeername()[0]}:{client.socket().getpeername()[1]}"
@@ -52,8 +62,14 @@ def on_connect(client, userdata, flags, rc) -> None:
 
 
 def on_disconnect(client, userdata, rc) -> None:
-    logger.warning("Unexpected disconnect")
+    if rc == 0:
+        logger.info("Disconnected cleanly")
+    else:
+        logger.warning("Unexpected disconnect")
 
+
+# Register kill signal handler
+signal.signal(signal.SIGTERM, term_signal_handler)
 
 # Create objects
 pms5003 = PMS5003(device="/dev/ttyAMA0", baudrate=9600, pin_enable=22, pin_reset=27)
