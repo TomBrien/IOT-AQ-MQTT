@@ -1,0 +1,11 @@
+broker:
+  address: "IP.ADDR.GOES.HERE"
+  port: 1883
+  user: username
+  password: password
+
+topic:
+  root: "aq"
+  location: "bedroom"
+
+publish_interval: 60
