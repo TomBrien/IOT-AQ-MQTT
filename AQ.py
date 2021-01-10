@@ -71,6 +71,8 @@ def on_disconnect(client, userdata, rc) -> None:
 # Register kill signal handler
 signal.signal(signal.SIGTERM, term_signal_handler)
 
+logger.info("Starting task")
+
 # Create objects
 pms5003 = PMS5003(device="/dev/ttyAMA0", baudrate=9600, pin_enable=22, pin_reset=27)
 
