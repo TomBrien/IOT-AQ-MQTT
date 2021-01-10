@@ -141,6 +141,7 @@ try:
         # Send data to broker ever publish_interval
         if datetime.now().timestamp() - last_publish > publish_interval:
             if client.is_connected():
+                logger.info("Sending data to broker")
                 client.publish(
                     full_topic("pm1.0_ug", config),
                     f"{np.mean(pm[:, 3]):.1f}",
