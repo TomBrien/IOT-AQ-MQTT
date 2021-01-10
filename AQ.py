@@ -23,10 +23,10 @@ if not os.path.exists(os.path.join(os.path.dirname(__file__), "logs")):
 
 fh = RotatingFileHandler(
     os.path.join(os.path.dirname(__file__), "logs", "log.txt"),
-    maxBytes=1024,
+    maxBytes=2.0 ** 20,
     backupCount=10,
 )
-fh.setLevel(logging.INFO)
+fh.setLevel(logging.DEBUG)
 fh.setFormatter(
     logging.Formatter("%(asctime)s [%(process)d] %(levelname)s %(message)s")
 )
