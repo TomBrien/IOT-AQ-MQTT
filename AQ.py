@@ -144,8 +144,10 @@ humidity = np.array([])
 eCO2 = np.array([])
 VOC = np.array([])
 
+run = True
+
 try:
-    while True:
+    while run == True:
         pm = np.append(pm, np.array([list(pms5003.read().data)[:12]]), axis=0)
 
         temperature = np.append(temperature, bme280.get_temperature())
@@ -233,8 +235,12 @@ try:
 
         time.sleep(1)
 except KeyboardInterrupt:
-    pass
+    logger.warning("Got Ctrl+C")
+except:
+    logger.critical(f"Unexpected Exception Received: {sys.exc_info()[0]}")
+    logger.critical(f"Traceback : {sys.exc_info()[2]}")
 finally:
+    logger.info("Arrived in finally statement")
     logger.info("Stopping MQTT loop thread")
     client.loop_stop()
     time.sleep(1)
