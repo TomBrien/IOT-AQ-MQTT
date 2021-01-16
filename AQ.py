@@ -27,7 +27,7 @@ fh = RotatingFileHandler(
     maxBytes=2.0 ** 20,
     backupCount=10,
 )
-fh.setLevel(logging.DEBUG)
+fh.setLevel(logging.INFO)
 fh.setFormatter(
     logging.Formatter("%(asctime)s [%(process)d] %(levelname)s: %(message)s")
 )
