@@ -11,7 +11,7 @@ import numpy as np
 import paho.mqtt.client as mqtt
 import yaml
 from bme280 import BME280
-from pms5003 import PMS5003
+from pms5003 import PMS5003, ChecksumMismatchError
 from sgp30 import SGP30
 from smbus2 import SMBus
 
@@ -29,7 +29,7 @@ fh = RotatingFileHandler(
 )
 fh.setLevel(logging.DEBUG)
 fh.setFormatter(
-    logging.Formatter("%(asctime)s [%(process)d] %(levelname)s %(message)s")
+    logging.Formatter("%(asctime)s [%(process)d] %(levelname)s: %(message)s")
 )
 logger.addHandler(fh)
 
@@ -236,9 +236,23 @@ try:
         time.sleep(1)
 except KeyboardInterrupt:
     logger.warning("Got Ctrl+C")
+except ChecksumMismatchError:
+    logger.warning(
+        "Caught PMS 5003 Checksum Error, ditching current data and resetting the clock."
+    )
+    last_publish = datetime.now().timestamp()  # Clean house on checksum error
+    pm = np.empty((0, 12))
+    temperature = np.array([])
+    pressure = np.array([])
+    humidity = np.array([])
+    eCO2 = np.array([])
+    VOC = np.array([])
 except:
-    logger.critical(f"Unexpected Exception Received: {sys.exc_info()[0]}")
-    logger.critical(f"Traceback : {sys.exc_info()[2]}")
+    logger.critical(
+        f"Unhandled Exception Received: {sys.exc_info()[0]}, "
+        f"from line number {sys.exc_info()[2].tb_lineno}"
+    )
+    logger.critical("Will now enter finally clean up and exit")
 finally:
     logger.info("Arrived in finally statement")
     logger.info("Stopping MQTT loop thread")
