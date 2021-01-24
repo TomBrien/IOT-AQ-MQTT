@@ -40,13 +40,11 @@ def full_topic(topic: str, config: dict) -> str:
 
 def term_signal_handler(signal, frame):
     logger.info("Received kill signal, trying to shutdown gracefully")
-    if "run" in locals():
+    if "run" in globals():
         pass  # No need to do anything special, handled by the loop
-    elif "client" in locals():  # Should always be true but check anyway
+    elif "client" in globals():  # Should always be true but check anyway
         if client.is_connected():
-            logger.warning(
-                "Received kill signal while setting up MQTT, attempting stop"
-            )
+            logger.warning("Received kill signal while setting up, attempting stop")
             client.loop_stop()
             client.disconnect()
 
