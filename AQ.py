@@ -40,7 +40,17 @@ def full_topic(topic: str, config: dict) -> str:
 
 def term_signal_handler(signal, frame):
     logger.info("Received kill signal, trying to shutdown gracefully")
-    raise SystemExit
+    if "run" in locals():
+        pass  # No need to do anything special, handled by the loop
+    elif "client" in locals():  # Should always be true but check anyway
+        if client.is_connected():
+            logger.warning(
+                "Received kill signal while setting up MQTT, attempting stop"
+            )
+            client.loop_stop()
+            client.disconnect()
+
+    sys.exit(0)
 
 
 def on_connect(client, userdata, flags, rc) -> None:
@@ -64,9 +74,6 @@ def on_disconnect(client, userdata, rc) -> None:
         logger.warning("Unexpected disconnect")
 
 
-# Register kill signal handler
-signal.signal(signal.SIGTERM, term_signal_handler)
-
 logger.info("Starting task")
 
 # Create objects
@@ -81,6 +88,10 @@ bme280 = BME280(i2c_dev=bus)
 os.chdir(os.path.dirname(__file__))
 with open("config.yaml", "r") as fi:
     config = yaml.load(fi, Loader=yaml.Loader)
+
+# Register kill signal handler,
+# do this here as this is the first point we need to undo things after
+signal.signal(signal.SIGTERM, term_signal_handler)
 
 # Create mqtt client
 client = mqtt.Client(f"AQ_{config['topic']['location']}")
