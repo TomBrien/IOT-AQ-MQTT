@@ -144,92 +144,95 @@ run = True
 
 while run:
     try:
-        pm = np.append(pm, np.array([list(pms5003.read().data)[:12]]), axis=0)
+        while True:
+            pm = np.append(pm, np.array([list(pms5003.read().data)[:12]]), axis=0)
 
-        temperature = np.append(temperature, bme280.get_temperature())
-        pressure = np.append(pressure, bme280.get_pressure())
-        humidity = np.append(humidity, bme280.get_humidity())
+            temperature = np.append(temperature, bme280.get_temperature())
+            pressure = np.append(pressure, bme280.get_pressure())
+            humidity = np.append(humidity, bme280.get_humidity())
 
-        gas = sgp30.get_air_quality()
-        eCO2 = np.append(eCO2, gas.equivalent_co2)
-        VOC = np.append(VOC, gas.total_voc)
+            gas = sgp30.get_air_quality()
+            eCO2 = np.append(eCO2, gas.equivalent_co2)
+            VOC = np.append(VOC, gas.total_voc)
 
-        # Send data to broker ever publish_interval
-        if datetime.now().timestamp() - last_publish > publish_interval:
-            if client.is_connected():
-                logger.info("Sending data to broker")
-                client.publish(
-                    full_topic("pm1.0_ug", config),
-                    f"{np.mean(pm[:, 3]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm2.5_ug", config),
-                    f"{np.mean(pm[:, 4]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm10_ug", config),
-                    f"{np.mean(pm[:, 5]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm_gt_0.3", config),
-                    f"{np.mean(pm[:, 6]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm_gt_0.5", config),
-                    f"{np.mean(pm[:, 7]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm_gt_1.0", config),
-                    f"{np.mean(pm[:, 8]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm_gt_2.5", config),
-                    f"{np.mean(pm[:, 9]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm_gt_5.0", config),
-                    f"{np.mean(pm[:, 10]):.1f}",
-                )
-                client.publish(
-                    full_topic("pm_gt_10.0", config),
-                    f"{np.mean(pm[:, 11]):.1f}",
-                )
-                client.publish(
-                    full_topic("temperature", config),
-                    f"{np.mean(temperature):.2f}",
-                )
-                client.publish(
-                    full_topic("pressure", config),
-                    f"{np.mean(pressure):.2f}",
-                )
-                client.publish(
-                    full_topic("humidity", config),
-                    f"{np.mean(humidity):.1f}",
-                )
-                client.publish(
-                    full_topic("eCO2", config),
-                    f"{np.mean(eCO2):.1f}",
-                )
-                client.publish(
-                    full_topic("VOC", config),
-                    f"{np.mean(VOC):.1f}",
-                )
-                client.publish(
-                    full_topic("last_start", config),
-                    last_boot,
-                )
+            # Send data to broker ever publish_interval
+            if datetime.now().timestamp() - last_publish > publish_interval:
+                if client.is_connected():
+                    logger.info("Sending data to broker")
+                    client.publish(
+                        full_topic("pm1.0_ug", config),
+                        f"{np.mean(pm[:, 3]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm2.5_ug", config),
+                        f"{np.mean(pm[:, 4]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm10_ug", config),
+                        f"{np.mean(pm[:, 5]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm_gt_0.3", config),
+                        f"{np.mean(pm[:, 6]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm_gt_0.5", config),
+                        f"{np.mean(pm[:, 7]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm_gt_1.0", config),
+                        f"{np.mean(pm[:, 8]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm_gt_2.5", config),
+                        f"{np.mean(pm[:, 9]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm_gt_5.0", config),
+                        f"{np.mean(pm[:, 10]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("pm_gt_10.0", config),
+                        f"{np.mean(pm[:, 11]):.1f}",
+                    )
+                    client.publish(
+                        full_topic("temperature", config),
+                        f"{np.mean(temperature):.2f}",
+                    )
+                    client.publish(
+                        full_topic("pressure", config),
+                        f"{np.mean(pressure):.2f}",
+                    )
+                    client.publish(
+                        full_topic("humidity", config),
+                        f"{np.mean(humidity):.1f}",
+                    )
+                    client.publish(
+                        full_topic("eCO2", config),
+                        f"{np.mean(eCO2):.1f}",
+                    )
+                    client.publish(
+                        full_topic("VOC", config),
+                        f"{np.mean(VOC):.1f}",
+                    )
+                    client.publish(
+                        full_topic("last_start", config),
+                        last_boot,
+                    )
 
-            last_publish = datetime.now().timestamp()  # Update regardless of success
+                last_publish = (
+                    datetime.now().timestamp()
+                )  # Update regardless of success
 
-            # Empty Arrays
-            pm = np.empty((0, 12))
-            temperature = np.array([])
-            pressure = np.array([])
-            humidity = np.array([])
-            eCO2 = np.array([])
-            VOC = np.array([])
+                # Empty Arrays
+                pm = np.empty((0, 12))
+                temperature = np.array([])
+                pressure = np.array([])
+                humidity = np.array([])
+                eCO2 = np.array([])
+                VOC = np.array([])
 
-        time.sleep(1)
+            time.sleep(1)
     except KeyboardInterrupt:
         logger.warning("Got Ctrl+C")
         run = False
@@ -254,10 +257,10 @@ while run:
         )
         logger.critical("Will now enter finally clean up and exit")
         run = False
-    finally:
-        logger.info("Arrived in finally statement")
-        logger.info("Stopping MQTT loop thread")
-        client.loop_stop()
-        time.sleep(1)
-        logger.info("Disconnecting from broker")
-        client.disconnect()
+
+logger.info("Left main while loop")
+logger.info("Stopping MQTT loop thread")
+client.loop_stop()
+time.sleep(1)
+logger.info("Disconnecting from broker")
+client.disconnect()
