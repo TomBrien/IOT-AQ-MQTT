@@ -40,11 +40,7 @@ def full_topic(topic: str, config: dict) -> str:
 
 def term_signal_handler(signal, frame):
     logger.info("Received kill signal, trying to shutdown gracefully")
-    client.loop_stop()
-    logger.info("MQTT client loop stopped")
-    client.disconnect()
-    logger.info("Disconnected from MQTT broker")
-    sys.exit(0)
+    raise SystemExit
 
 
 def on_connect(client, userdata, flags, rc) -> None:
@@ -146,8 +142,8 @@ VOC = np.array([])
 
 run = True
 
-try:
-    while run == True:
+while run:
+    try:
         pm = np.append(pm, np.array([list(pms5003.read().data)[:12]]), axis=0)
 
         temperature = np.append(temperature, bme280.get_temperature())
@@ -234,29 +230,34 @@ try:
             VOC = np.array([])
 
         time.sleep(1)
-except KeyboardInterrupt:
-    logger.warning("Got Ctrl+C")
-except ChecksumMismatchError:
-    logger.warning(
-        "Caught PMS 5003 Checksum Error, ditching current data and resetting the clock."
-    )
-    last_publish = datetime.now().timestamp()  # Clean house on checksum error
-    pm = np.empty((0, 12))
-    temperature = np.array([])
-    pressure = np.array([])
-    humidity = np.array([])
-    eCO2 = np.array([])
-    VOC = np.array([])
-except:
-    logger.critical(
-        f"Unhandled Exception Received: {sys.exc_info()[0]}, "
-        f"from line number {sys.exc_info()[2].tb_lineno}"
-    )
-    logger.critical("Will now enter finally clean up and exit")
-finally:
-    logger.info("Arrived in finally statement")
-    logger.info("Stopping MQTT loop thread")
-    client.loop_stop()
-    time.sleep(1)
-    logger.info("Disconnecting from broker")
-    client.disconnect()
+    except KeyboardInterrupt:
+        logger.warning("Got Ctrl+C")
+        run = False
+    except ChecksumMismatchError:
+        logger.warning(
+            "Caught PMS 5003 Checksum Error, ditching current data and resetting the clock."
+        )
+        last_publish = datetime.now().timestamp()  # Clean house on checksum error
+        pm = np.empty((0, 12))
+        temperature = np.array([])
+        pressure = np.array([])
+        humidity = np.array([])
+        eCO2 = np.array([])
+        VOC = np.array([])
+    except SystemExit:
+        # Close gracefull from sys.exit
+        run = False
+    except:
+        logger.critical(
+            f"Unhandled Exception Received: {sys.exc_info()[0]}, "
+            f"from line number {sys.exc_info()[2].tb_lineno}"
+        )
+        logger.critical("Will now enter finally clean up and exit")
+        run = False
+    finally:
+        logger.info("Arrived in finally statement")
+        logger.info("Stopping MQTT loop thread")
+        client.loop_stop()
+        time.sleep(1)
+        logger.info("Disconnecting from broker")
+        client.disconnect()
